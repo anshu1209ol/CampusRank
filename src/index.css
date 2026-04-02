@@ -14,15 +14,27 @@
 
 @layer base {
   body {
-    @apply bg-[#050505] text-white/90 font-sans font-normal antialiased selection:bg-neon-purple/30 selection:text-white;
+    @apply bg-[#050505] text-white/90 font-sans font-normal antialiased selection:bg-neon-purple/30 selection:text-white transition-colors duration-500;
+  }
+  
+  .light body {
+    @apply bg-gray-50 text-slate-900 selection:bg-neon-purple/20 selection:text-slate-900;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-light tracking-tight text-white;
+    @apply font-display font-light tracking-tight text-white transition-colors duration-500;
+  }
+
+  .light h1, .light h2, .light h3, .light h4, .light h5, .light h6 {
+    @apply text-slate-900;
   }
 
   option {
     @apply bg-[#111] text-white;
+  }
+
+  .light option {
+    @apply bg-white text-slate-900;
   }
 }
 
