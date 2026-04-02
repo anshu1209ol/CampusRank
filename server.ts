@@ -51,7 +51,10 @@ async function startServer() {
   }));
   
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? 'https://yourdomain.com' : '*', // Configure for prod
+    // Dynamically allow Vercel preview environments and your explicit FRONTEND_URL in production
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.FRONTEND_URL || 'https://campusrank.vercel.app', /\.vercel\.app$/]
+      : '*', 
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
