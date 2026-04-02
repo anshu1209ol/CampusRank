@@ -21,22 +21,20 @@ try {
   const { getFirestore } = await import('firebase-admin/firestore');
   const { getAuth } = await import('firebase-admin/auth');
 
-  const configPath = './firebase-applet-config.json';
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    
-    if (firebaseConfig.projectId) {
-      const adminApp = initializeApp({
-        projectId: firebaseConfig.projectId
-      });
-      adminDb = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
-      adminAuth = getAuth(adminApp);
-      console.log('✅ Firebase Admin initialized for project:', firebaseConfig.projectId);
-    } else {
-      console.warn('⚠️  Firebase config missing projectId — admin APIs disabled');
-    }
+  // Use environment variables for initialization
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+  const databaseId = process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+
+  if (projectId) {
+    const adminApp = initializeApp({
+      projectId: projectId
+    });
+    // Ensure we also grab databaseId to connect specifically to that DB if multi-DB
+    adminDb = getFirestore(adminApp, databaseId);
+    adminAuth = getAuth(adminApp);
+    console.log('✅ Firebase Admin initialized via environment for project:', projectId);
   } else {
-    console.warn('⚠️  firebase-applet-config.json not found — admin APIs disabled');
+    console.warn('⚠️  VITE_FIREBASE_PROJECT_ID not found in environment — admin APIs disabled');
   }
 } catch (err) {
   console.warn('⚠️  Firebase Admin init failed (this is OK for local dev):', (err as Error).message);
