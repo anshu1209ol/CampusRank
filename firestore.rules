@@ -1,0 +1,245 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - name: string (required, size 1-100)
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: ['student', 'teacher', 'admin'])
+    //   - college: string (optional, size 0-200)
+    //   - photoURL: string (optional, url format)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: tests
+    // Document ID: {testId}
+    // Fields:
+    //   - title: string (required, size 1-200)
+    //   - description: string (required, size 1-2000)
+    //   - duration: number (required, positive)
+    //   - category: string (required, size 1-100)
+    //   - teacherId: string (required, immutable)
+    //   - questions: list (required, size 1-100)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: submissions
+    // Document ID: {submissionId}
+    // Fields:
+    //   - testId: string (required, immutable)
+    //   - testTitle: string (required)
+    //   - studentId: string (required, immutable)
+    //   - studentName: string (required)
+    //   - teacherId: string (required, immutable)
+    //   - answers: list (required)
+    //   - score: number (required)
+    //   - totalQuestions: number (required)
+    //   - accuracy: number (required)
+    //   - timeTaken: number (required)
+    //   - submittedAt: timestamp (required, immutable)
+    //
+    // Collection: alerts
+    // Document ID: {alertId}
+    // Fields:
+    //   - testId: string (required, immutable)
+    //   - studentId: string (required, immutable)
+    //   - studentName: string (required)
+    //   - teacherId: string (required, immutable)
+    //   - type: string (required, enum: ['tab_switch', 'ai_monitoring'])
+    //   - details: string (required)
+    //   - timestamp: timestamp (required, immutable)
+    //
+    // Collection: colleges
+    // Document ID: {collegeId}
+    // Fields:
+    //   - name: string (required)
+    //   - location: string (optional)
+    //   - studentCount: number (optional)
+    //   - teacherCount: number (optional)
+    //   - status: string (required, enum: ['active', 'pending', 'suspended'])
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: certificates
+    // Document ID: {certificateId}
+    // Fields:
+    //   - studentId: string (required, immutable)
+    //   - testId: string (required, immutable)
+    //   - testTitle: string (required)
+    //   - issueDate: timestamp (required, immutable)
+    //   - score: number (required)
+    //   - certificateUrl: string (required)
+    //
+    // Collection: leaderboard
+    // Document ID: {studentId}
+    // Fields:
+    //   - studentId: string (required, immutable)
+    //   - studentName: string (required)
+    //   - college: string (required)
+    //   - totalPoints: number (required)
+    //   - rank: number (optional)
+    //   - lastUpdated: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "anshulsikarwar84@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'name', 'email', 'role', 'college', 'photoURL', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidEmail(data.email) &&
+             data.role in ['student', 'teacher', 'admin'] &&
+             (!('college' in data) || (data.college is string && data.college.size() <= 200)) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    function isValidTest(data) {
+      return hasOnlyAllowedFields(['title', 'description', 'duration', 'category', 'teacherId', 'teacherName', 'questions', 'createdAt', 'active']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.duration is number && data.duration > 0 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.teacherId is string &&
+             data.questions is list && data.questions.size() > 0 && data.questions.size() <= 100;
+    }
+
+    function isValidSubmission(data) {
+      return hasOnlyAllowedFields(['testId', 'testTitle', 'studentId', 'studentName', 'studentEmail', 'teacherId', 'answers', 'score', 'totalQuestions', 'accuracy', 'timeTaken', 'submittedAt', 'warnings']) &&
+             data.testId is string &&
+             data.testTitle is string &&
+             data.studentId is string &&
+             data.studentName is string &&
+             data.teacherId is string &&
+             data.answers is list &&
+             data.score is number &&
+             data.totalQuestions is number &&
+             data.accuracy is number &&
+             data.timeTaken is number;
+    }
+
+    function isValidAlert(data) {
+      return hasOnlyAllowedFields(['testId', 'testTitle', 'studentId', 'studentName', 'teacherId', 'type', 'details', 'timestamp', 'severity']) &&
+             data.testId is string &&
+             data.studentId is string &&
+             data.studentName is string &&
+             data.teacherId is string &&
+             data.type in ['tab_switch', 'ai_monitoring'] &&
+             data.details is string;
+    }
+
+    function isValidCollege(data) {
+      return hasOnlyAllowedFields(['name', 'location', 'studentCount', 'teacherCount', 'status', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.status in ['active', 'pending', 'suspended'];
+    }
+
+    function isValidCertificate(data) {
+      return hasOnlyAllowedFields(['studentId', 'testId', 'testTitle', 'issueDate', 'score', 'certificateUrl']) &&
+             data.studentId is string &&
+             data.testId is string &&
+             data.testTitle is string &&
+             data.score is number &&
+             isValidUrl(data.certificateUrl);
+    }
+
+    function isValidLeaderboard(data) {
+      return hasOnlyAllowedFields(['studentId', 'studentName', 'college', 'totalPoints', 'rank', 'lastUpdated']) &&
+             data.studentId is string &&
+             data.studentName is string &&
+             data.college is string &&
+             data.totalPoints is number;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+    }
+
+    match /tests/{testId} {
+      allow read: if isAuthenticated();
+      allow create: if (isTeacher() || isAdmin()) && isValidTest(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
+      allow update: if (resource.data.teacherId == request.auth.uid || isAdmin()) && isValidTest(request.resource.data) && request.resource.data.teacherId == resource.data.teacherId;
+      allow delete: if resource.data.teacherId == request.auth.uid || isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || resource.data.teacherId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSubmission(request.resource.data) && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || resource.data.teacherId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidAlert(request.resource.data) && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /colleges/{collegeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /certificates/{certificateId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow create: if isAdmin(); // Certificates are issued by the system/admin
+      allow update, delete: if isAdmin();
+    }
+
+    match /leaderboard/{studentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Leaderboard is updated by system/admin
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform (Student, Teacher, or Admin)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "role": { "type": "string", "enum": ["student", "teacher", "admin"], "description": "User role" },
+        "college": { "type": "string", "description": "College name" },
+        "photoURL": { "type": "string", "format": "uri", "description": "Profile picture URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Test": {
+      "title": "Test",
+      "description": "An assessment created by a teacher",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Test title" },
+        "description": { "type": "string", "description": "Test description" },
+        "duration": { "type": "integer", "description": "Duration in minutes" },
+        "category": { "type": "string", "description": "Subject category" },
+        "teacherId": { "type": "string", "description": "UID of the teacher who created the test" },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "correctOption": { "type": "integer" },
+              "type": { "type": "string", "enum": ["mcq", "coding"] }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "duration", "teacherId", "questions"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "A student's attempt at a test",
+      "type": "object",
+      "properties": {
+        "testId": { "type": "string", "description": "ID of the test" },
+        "testTitle": { "type": "string", "description": "Title of the test" },
+        "studentId": { "type": "string", "description": "UID of the student" },
+        "studentName": { "type": "string", "description": "Name of the student" },
+        "teacherId": { "type": "string", "description": "UID of the teacher" },
+        "answers": { "type": "array", "items": { "type": "object" } },
+        "score": { "type": "number", "description": "Calculated score" },
+        "totalQuestions": { "type": "integer", "description": "Total number of questions" },
+        "accuracy": { "type": "number", "description": "Accuracy percentage" },
+        "timeTaken": { "type": "integer", "description": "Time taken in seconds" },
+        "submittedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["testId", "studentId", "score", "teacherId"]
+    },
+    "Alert": {
+      "title": "Alert",
+      "description": "A cheating or integrity alert triggered during a test",
+      "type": "object",
+      "properties": {
+        "testId": { "type": "string", "description": "ID of the test" },
+        "studentId": { "type": "string", "description": "UID of the student" },
+        "studentName": { "type": "string", "description": "Name of the student" },
+        "teacherId": { "type": "string", "description": "UID of the teacher" },
+        "type": { "type": "string", "enum": ["tab_switch", "ai_monitoring"], "description": "Type of alert" },
+        "details": { "type": "string", "description": "Details of the alert" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["testId", "studentId", "teacherId", "type"]
+    },
+    "College": {
+      "title": "College",
+      "description": "An educational institution registered on the platform",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the college" },
+        "location": { "type": "string", "description": "Location of the college" },
+        "studentCount": { "type": "integer", "description": "Number of students" },
+        "teacherCount": { "type": "integer", "description": "Number of teachers" },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status"]
+    },
+    "Certificate": {
+      "title": "Certificate",
+      "description": "A certificate earned by a student for completing a test",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "UID of the student" },
+        "testId": { "type": "string", "description": "ID of the test" },
+        "testTitle": { "type": "string", "description": "Title of the test" },
+        "issueDate": { "type": "string", "format": "date-time" },
+        "score": { "type": "number" },
+        "certificateUrl": { "type": "string", "format": "uri" }
+      },
+      "required": ["studentId", "testId", "issueDate"]
+    },
+    "Leaderboard": {
+      "title": "Leaderboard",
+      "description": "Aggregated ranking data for students",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "UID of the student" },
+        "studentName": { "type": "string", "description": "Name of the student" },
+        "college": { "type": "string", "description": "College name" },
+        "totalPoints": { "type": "integer", "description": "Total skill points earned" },
+        "rank": { "type": "integer", "description": "Current global rank" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "studentName", "totalPoints"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/tests/{testId}": {
+      "schema": "Test",
+      "description": "Available tests"
+    },
+    "/submissions/{submissionId}": {
+      "schema": "Submission",
+      "description": "Test attempts and results"
+    },
+    "/alerts/{alertId}": {
+      "schema": "Alert",
+      "description": "Integrity alerts"
+    },
+    "/colleges/{collegeId}": {
+      "schema": "College",
+      "description": "Registered colleges"
+    },
+    "/certificates/{certificateId}": {
+      "schema": "Certificate",
+      "description": "Earned certificates"
+    },
+    "/leaderboard/{studentId}": {
+      "schema": "Leaderboard",
+      "description": "Global rankings"
+    }
+  }
+}
