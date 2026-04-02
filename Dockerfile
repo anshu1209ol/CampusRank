@@ -18,7 +18,8 @@ RUN npm install --production
 COPY server.ts ./
 COPY tsconfig.json ./
 
-# Install typescript and tsx to run the server
+# Install typescript, tsx, and docker CLI (so the server can spawn code execution containers)
+RUN apk add --no-cache docker-cli
 RUN npm install -g tsx typescript
 
 # Copy the built frontend from the previous stage to a 'dist' folder
