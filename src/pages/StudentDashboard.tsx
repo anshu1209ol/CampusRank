@@ -10,7 +10,8 @@ import {
   Zap,
   Sparkles,
   Clock,
-  Loader2
+  Loader2,
+  Code2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -34,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/student' },
+  { icon: Code2, label: 'Problems', href: '/student/problems' },
   { icon: Trophy, label: 'Leaderboard', href: '/leaderboard' },
   { icon: Award, label: 'Certificates', href: '/certificates' },
 ];
@@ -247,7 +249,7 @@ export default function StudentDashboard() {
                 {submissions.length > 0 ? (
                   <>Based on your last {submissions.length} test{submissions.length > 1 ? 's' : ''}, your average accuracy is <span className="text-white font-semibold underline underline-offset-8 decoration-white/30">{stats.accuracy}</span>. {parseInt(stats.accuracy) >= 80 ? 'Great work! Keep pushing for excellence.' : parseInt(stats.accuracy) >= 60 ? 'Good progress! Focus on your weak areas to improve further.' : 'Keep practicing! Consistent effort will improve your scores.'}</>
                 ) : (
-                  <>Welcome to CampusRank! Take your first test to get personalized AI insights and recommendations.</>
+                  <>Welcome to SkillForge! Take your first test to get personalized AI insights and recommendations.</>
                 )}
               </p>
             </div>

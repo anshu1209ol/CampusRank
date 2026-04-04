@@ -237,6 +237,11 @@ service cloud.firestore {
       allow write: if isAdmin(); // Leaderboard is updated by system/admin
     }
 
+    match /problems/{problemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default deny
     match /{path=**} {
       allow read, write: if false;

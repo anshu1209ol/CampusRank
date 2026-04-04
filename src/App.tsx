@@ -27,6 +27,8 @@ const Profile = lazy(() => import('@/src/pages/Profile'));
 const Payment = lazy(() => import('@/src/pages/Payment'));
 const Settings = lazy(() => import('@/src/pages/Settings'));
 const Practice = lazy(() => import('@/src/pages/student/Practice'));
+const Problems = lazy(() => import('@/src/pages/student/Problems'));
+const SolveProblem = lazy(() => import('@/src/pages/student/SolveProblem'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen bg-black flex items-center justify-center">
@@ -53,6 +55,8 @@ export default function App() {
                   <Routes>
                     <Route index element={<StudentDashboard />} />
                     <Route path="practice" element={<Practice />} />
+                    <Route path="problems" element={<Problems />} />
+                    <Route path="problems/:problemId" element={<SolveProblem />} />
                   </Routes>
                 </AuthGuard>
               } 

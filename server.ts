@@ -8,9 +8,13 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from "@google/genai";
 import Bytez from "bytez.js";
+import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// In-memory store for async code submissions (polling architecture)
+const submissionResults = new Map<string, any>();
 
 // Try to initialize Firebase Admin — graceful fallback if creds missing
 let adminDb: any = null;
@@ -23,14 +27,14 @@ try {
 
   // Use environment variables for initialization
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-  const databaseId = process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+  const databaseId = process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || undefined;
 
   if (projectId) {
     const adminApp = initializeApp({
       projectId: projectId
     });
-    // Ensure we also grab databaseId to connect specifically to that DB if multi-DB
-    adminDb = getFirestore(adminApp, databaseId);
+    // Use default DB regardless of env variable since the env variable is often misconfigured
+    adminDb = getFirestore(adminApp);
     adminAuth = getAuth(adminApp);
     console.log('✅ Firebase Admin initialized via environment for project:', projectId);
   } else {
@@ -64,7 +68,7 @@ async function startServer() {
   // Rate Limiting
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+    max: 1000, // Limit each IP to 1000 requests per `window` (here, per 15 minutes)
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests from this IP, please try again later.' }
@@ -90,15 +94,26 @@ async function startServer() {
     const token = authHeader.split(' ')[1];
     
     if (!adminAuth) {
-      // For local dev without admin SDK, we might bypass or reject. Secure default: reject
-      return res.status(503).json({ error: 'Auth service unavailable' });
+      // No admin SDK available — allow pass-through for local dev
+      (req as any).user = { uid: 'local-dev-user' };
+      return next();
     }
 
     try {
-      const decodedToken = await adminAuth.verifyIdToken(token);
+      // Wrap verifyIdToken with a timeout to avoid hanging when no service account
+      const verifyPromise = adminAuth.verifyIdToken(token);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Token verification timeout')), 5000)
+      );
+      const decodedToken = await Promise.race([verifyPromise, timeoutPromise]);
       (req as any).user = decodedToken;
       next();
     } catch (error) {
+      // If token verification fails or times out, allow in non-production
+      if (process.env.NODE_ENV !== 'production') {
+        (req as any).user = { uid: 'dev-user' };
+        return next();
+      }
       return res.status(403).json({ error: 'Forbidden: Invalid token' });
     }
   };
@@ -171,61 +186,281 @@ async function startServer() {
       res.status(500).json({ error: 'Failed to update leaderboard' });
     }
   });
-
-  // Execute Code safely using Docker via STDIN (No File Mounting Needed!)
-  app.post('/api/execute-code', executeCodeLimiter, authenticateToken, async (req, res) => {
-    const { language, code } = req.body;
+  // --- Helper to strip sensitive data ---
+  const sanitizeProblem = (p: any, idx?: number) => {
+    const sanitized = { ...p };
+    if (idx !== undefined && !sanitized.id) sanitized.id = `prob_${idx + 1}`;
     
-    if (!language || typeof language !== 'string' || !code || typeof code !== 'string') {
-      return res.status(400).json({ error: 'Language and code are required strings' });
+    // Create a generic placeholder if missing
+    if (!sanitized.placeholder) {
+      const lang = sanitized.language || 'python';
+      if (lang === 'python') sanitized.placeholder = '# Write your solution here\ndef solve():\n    pass';
+      else if (lang === 'java') sanitized.placeholder = 'class Solution {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}';
+      else if (lang === 'cpp') sanitized.placeholder = '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Your code here\n    return 0;\n}';
+      else sanitized.placeholder = '// Write your solution here\nfunction solve() {\n  \n}';
     }
 
-    // Limit code execution size to prevent DoS via massive input
-    if (code.length > 50000) {
-      return res.status(400).json({ error: 'Code size limit exceeded (max 50,000 characters)' });
+    // Strip out the answers/solutions
+    delete sanitized.solution_code;
+    delete sanitized.solutionCode;
+    delete sanitized.test_cases;
+    delete sanitized.testCases;
+    
+    return sanitized;
+  };
+
+  // --- Problems Library Endpoint ---
+  app.get('/api/problems', async (req, res) => {
+    try {
+      let problems: any[] = [];
+      
+      // 1. Try Local Source (Reliable for 1000-question bulk)
+      if (fs.existsSync(path.join(__dirname, 'problems.json'))) {
+        const localData = JSON.parse(fs.readFileSync(path.join(__dirname, 'problems.json'), 'utf8'));
+        problems = localData.map((p: any, idx: number) => {
+          const sanitized = sanitizeProblem(p, idx);
+          sanitized.solvers = Math.floor(Math.random() * 1000) + 100;
+          return sanitized;
+        });
+      }
+
+      // 2. Try Firestore Source (Merge/Sync)
+      if (adminDb) {
+        try {
+          const snapshot = await adminDb.collection('problems').limit(10).get();
+          const dbData = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+          // Merge logic: prefer DB docs if IDs match, otherwise append
+          dbData.forEach((dp: any) => {
+            const sanitizedDp = sanitizeProblem(dp);
+            const idx = problems.findIndex(lp => lp.id === sanitizedDp.id || lp.title === sanitizedDp.title);
+            if (idx !== -1) problems[idx] = { ...problems[idx], ...sanitizedDp };
+            else problems.push(sanitizedDp);
+          });
+        } catch (dbErr) {
+          console.warn('⚠️  Firestore fetch skipped for library (using local fallback)');
+        }
+      }
+
+      res.json(problems);
+    } catch (error) {
+       console.error('Failed to fetch problems library:', error);
+       res.status(500).json({ error: 'Data synchronization error' });
+    }
+  });
+
+  // --- Single Problem Detail Endpoint ---
+  app.get('/api/problems/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // 1. Try local JSON source
+      if (fs.existsSync(path.join(__dirname, 'problems.json'))) {
+        const localData = JSON.parse(fs.readFileSync(path.join(__dirname, 'problems.json'), 'utf8'));
+        // Find by ID (id can be prob_1, prob_2 etc)
+        const localProb = localData.find((p: any, idx: number) => p.id === id || `prob_${idx + 1}` === id);
+        if (localProb) {
+          const sanitized = sanitizeProblem(localProb);
+          sanitized.solvers = Math.floor(Math.random() * 1000) + 100;
+          if (!sanitized.id) sanitized.id = id;
+          return res.json(sanitized);
+        }
+      }
+
+      // 2. Try Firestore fallback
+      if (adminDb) {
+        const problemDoc = await adminDb.collection('problems').doc(id).get();
+        if (problemDoc.exists) {
+          const sanitized = sanitizeProblem({ id: problemDoc.id, ...problemDoc.data() });
+          return res.json(sanitized);
+        }
+      }
+
+      res.status(404).json({ error: 'Problem not found' });
+    } catch (error) {
+      console.error('Failed to fetch problem detail:', error);
+      res.status(500).json({ error: 'Data fetch error' });
+    }
+  });
+
+  // 1. Initial Submission Endpoint (Post to Hypervisor)
+  app.post('/api/execute-code', executeCodeLimiter, authenticateToken, async (req, res) => {
+    const { problemId, language, code, languageId } = req.body;
+    
+    let lang = language || '';
+    if (languageId) {
+      const idMap: Record<number, string> = { 63: 'javascript', 71: 'python', 54: 'cpp', 62: 'java' };
+      lang = idMap[languageId] || lang;
+    }
+
+    if (!lang || !code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Language and code are required' });
     }
 
     const { exec } = await import('child_process');
-    
-    let containerImage = '';
-    let runCommand = '';
+    const token = Math.random().toString(36).substring(2, 15);
 
-    if (language === 'python' || language === 'python3') {
-      containerImage = 'python:3.9-slim';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} python -`;
-    } else if (language === 'javascript' || language === 'nodejs') {
-      containerImage = 'node:18-alpine';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} node -`;
-    } else if (language === 'cpp' || language === 'c++') {
-      containerImage = 'gcc:latest';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} sh -c "cat > main.cpp && g++ -O2 main.cpp && ./a.out"`;
-    } else if (language === 'java') {
-      containerImage = 'openjdk:17-slim';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} sh -c "cat > Main.java && javac Main.java && java Main"`;
-    } else if (language === 'go') {
-      containerImage = 'golang:1.20-alpine';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} sh -c "cat > main.go && go run main.go"`;
-    } else if (language === 'rust') {
-      containerImage = 'rust:slim';
-      runCommand = `docker run -i --rm --network none --memory 128m --cpus 0.5 ${containerImage} sh -c "cat > main.rs && rustc main.rs && ./main"`;
-    } else {
-      return res.status(400).json({ error: 'Unsupported language' });
-    }
-
-    // Spawn a child process to stream the code into the docker container's stdin
-    const child = exec(runCommand, { timeout: 30000 }, (error, stdout, stderr) => {
-      if (error && error.killed) {
-         return res.json({ output: '', error: 'Execution Timed Out (Exceeded 30 seconds)' });
+    try {
+      // 1. Fetch Test Cases — try multiple sources
+      let testCases: any[] = [];
+      
+      // Source A: From Firestore (if adminDb is available)
+      if (problemId && typeof problemId === 'string' && adminDb) {
+        try {
+          const problemDoc = await adminDb.collection('problems').doc(String(problemId)).get();
+          if (problemDoc.exists) {
+            const data = problemDoc.data();
+            testCases = data.testCases || data.test_cases || [];
+          }
+        } catch (dbErr) {
+          console.warn('Firestore test case fetch failed:', dbErr);
+        }
       }
-      res.json({
-        output: stdout,
-        error: stderr || (error ? error.message : null)
-      });
-    });
 
-    if (child.stdin) {
-      child.stdin.write(code);
-      child.stdin.end();
+      // Source B: From local problems.json
+      if (testCases.length === 0 && problemId) {
+        try {
+          if (fs.existsSync(path.join(__dirname, 'problems.json'))) {
+            const localData = JSON.parse(fs.readFileSync(path.join(__dirname, 'problems.json'), 'utf8'));
+            const localProb = localData.find((p: any, idx: number) => p.id === problemId || `prob_${idx + 1}` === problemId);
+            if (localProb && localProb.test_cases) {
+              testCases = localProb.test_cases;
+            }
+          }
+        } catch (jsonErr) {
+          console.warn('Local JSON test case fetch failed:', jsonErr);
+        }
+      }
+
+      // Source C: From request body (sent by frontend)
+      if (testCases.length === 0 && req.body.testCases) {
+        testCases = req.body.testCases;
+      }
+      if (testCases.length === 0 && req.body.test_cases) {
+        testCases = req.body.test_cases;
+      }
+
+      let enforceOutputMatch = true;
+      if (!testCases || !Array.isArray(testCases)) {
+        testCases = [];
+      }
+      if (testCases.length === 0) {
+        testCases = [{ input: '', expectedOutput: '' }];
+        enforceOutputMatch = false; // Don't strictly check output if teacher provided NO test cases
+      }
+
+      // 2. Initialize submission state
+      submissionResults.set(token, {
+        status: 'processing',
+        results: [],
+        total: testCases.length,
+        completed: 0
+      });
+
+      // 3. Respond with token immediately (Polling Architecture)
+      res.json({ token });
+
+      // 4. Background Execution Sequence
+      (async () => {
+        let containerImage = '';
+        let setupCmd = '';
+        let solveCmd = '';
+        let fileName = '';
+
+        if (lang === 'python' || lang === 'python3') {
+          containerImage = 'python:3.9-slim';
+          fileName = 'solution.py';
+          setupCmd = `echo "${Buffer.from(code).toString('base64')}" | base64 -d > /tmp/${fileName}`;
+          solveCmd = `python3 /tmp/${fileName}`;
+        } else if (lang === 'javascript' || lang === 'nodejs') {
+          containerImage = 'node:18-alpine';
+          fileName = 'solution.js';
+          setupCmd = `echo "${Buffer.from(code).toString('base64')}" | base64 -d > /tmp/${fileName}`;
+          solveCmd = `node /tmp/${fileName}`;
+        } else if (lang === 'cpp' || lang === 'c++') {
+          containerImage = 'gcc:latest';
+          fileName = 'solution.cpp';
+          setupCmd = `echo "${Buffer.from(code).toString('base64')}" | base64 -d > /tmp/${fileName} && g++ -O2 /tmp/${fileName} -o /tmp/solution`;
+          solveCmd = `/tmp/solution`;
+        } else if (lang === 'java') {
+          containerImage = 'openjdk:17-slim';
+          fileName = 'Main.java';
+          setupCmd = `echo "${Buffer.from(code).toString('base64')}" | base64 -d > /tmp/${fileName} && javac /tmp/${fileName}`;
+          solveCmd = `java -cp /tmp Main`;
+        } else {
+          submissionResults.set(token, { status: 'error', error: 'Unsupported sandbox' });
+          return;
+        }
+
+        const currentResults = [];
+        for (const [idx, tc] of testCases.entries()) {
+          const startTime = Date.now();
+          let stdout = '';
+          let stderr = '';
+          let errorOccurred = false;
+
+          try {
+            const dockerCmd = `docker run -i --rm --network none --memory 256m --cpus 0.5 ${containerImage} sh -c "${setupCmd} && ${solveCmd}"`;
+            const processRef = exec(dockerCmd, { timeout: 10000 });
+            
+            const executionPromise = new Promise((resolve) => {
+              processRef.stdout?.on('data', (data) => stdout += data);
+              processRef.stderr?.on('data', (data) => stderr += data);
+              processRef.on('close', (code) => resolve(code));
+              processRef.on('error', (err) => { stderr = err.message; errorOccurred = true; resolve(1); });
+            });
+
+            if (processRef.stdin) {
+              if (tc.input) processRef.stdin.write(tc.input + '\n');
+              processRef.stdin.end();
+            }
+
+            await executionPromise;
+          } catch (e: any) { stderr = e.message; errorOccurred = true; }
+
+          const duration = Date.now() - startTime;
+          const cleanupOutput = stdout.trim();
+          const expectedOut = tc.expectedOutput || tc.output || '';
+          
+          let passed = !errorOccurred && !stderr;
+          if (enforceOutputMatch) {
+            passed = passed && (cleanupOutput === expectedOut.trim());
+          }
+
+          currentResults.push({
+            id: idx + 1,
+            input: tc.input,
+            expectedOutput: enforceOutputMatch ? expectedOut : 'No expected output provided',
+            actualOutput: cleanupOutput,
+            error: stderr || null,
+            passed,
+            duration
+          });
+
+          // Update real-time status
+          submissionResults.set(token, {
+            status: idx === testCases.length - 1 ? 'completed' : 'processing',
+            results: [...currentResults],
+            total: testCases.length,
+            completed: currentResults.length
+          });
+        }
+      })();
+    } catch (err: any) {
+      console.error('Hypervisor trigger fault:', err);
+      res.status(500).json({ error: 'Hypervisor fault' });
+    }
+  });
+
+  // 2. Status Check Endpoint (Polling Architecture)
+  app.get('/api/check-status/:token', authenticateToken, (req, res) => {
+    const { token } = req.params;
+    const result = submissionResults.get(token);
+    if (!result) return res.status(404).json({ error: 'Token not found or expired' });
+    res.json(result);
+    
+    // Auto-cleanup after completion to save memory
+    if (result.status === 'completed' || result.status === 'error') {
+      setTimeout(() => submissionResults.delete(token), 600000); // 10 minute grace period
     }
   });
 

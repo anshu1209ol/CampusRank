@@ -1,5 +1,9 @@
 {
   "name": "CampusRank",
   "description": "A premium, modern, highly interactive college-level skill benchmarking and anti-cheating assessment system.",
-  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
 }

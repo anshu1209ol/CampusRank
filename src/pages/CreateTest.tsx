@@ -13,6 +13,7 @@ import {
   Sparkles,
   Zap
 } from 'lucide-react';
+import Editor from '@monaco-editor/react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
@@ -43,9 +44,9 @@ export default function CreateTest() {
     { 
       id: '1', 
       type: 'coding', 
-      question: 'Write a program to print "Hello, CampusRank!" to the console.', 
+      question: 'Write a program to print "Hello, SkillForge!" to the console.', 
       language: 'javascript',
-      placeholder: 'console.log("Hello, CampusRank!");',
+      placeholder: 'console.log("Hello, SkillForge!");',
       options: ['', '', '', ''], 
       correct: 0 
     },
@@ -325,38 +326,116 @@ export default function CreateTest() {
                     )}
 
                     {q.type === 'coding' && (
-                      <div className="space-y-4 md:space-y-6 mt-6 md:mt-8">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <label className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-[0.3em] block shrink-0">
-                            Programming Language
-                          </label>
-                          <div className="relative w-full sm:w-auto">
-                            <select 
-                              value={q.language || 'javascript'}
-                              onChange={(e) => updateQuestion(q.id, { language: e.target.value })}
-                              className="w-full sm:w-auto bg-white/5 border border-white/10 rounded-xl md:rounded-2xl px-4 md:px-6 py-3 cursor-pointer text-xs md:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all appearance-none uppercase tracking-wider text-ellipsis"
-                            >
-                              <option value="javascript">JavaScript (Node.js)</option>
-                              <option value="python">Python</option>
-                              <option value="cpp">C++</option>
-                              <option value="java">Java</option>
-                              <option value="go">Go</option>
-                              <option value="rust">Rust</option>
-                            </select>
-                            <Layout className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                      <div className="space-y-8 mt-8">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                          <div className="space-y-4 flex-1">
+                            <label className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-[0.3em] block">
+                              Programming Language
+                            </label>
+                            <div className="relative w-full">
+                              <select 
+                                value={q.language || 'javascript'}
+                                onChange={(e) => updateQuestion(q.id, { language: e.target.value })}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 cursor-pointer text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all appearance-none uppercase tracking-wider"
+                              >
+                                <option value="javascript">JavaScript (Node.js)</option>
+                                <option value="python">Python</option>
+                                <option value="cpp">C++</option>
+                                <option value="java">Java</option>
+                              </select>
+                              <Layout className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                            </div>
                           </div>
                         </div>
-                        <div>
-                          <label className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-[0.3em] block mb-3">
+
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-[0.3em] block">
                             Starter Code (Optional)
                           </label>
-                          <textarea 
-                            value={q.placeholder || ''}
-                            onChange={(e) => updateQuestion(q.id, { placeholder: e.target.value })}
-                            placeholder="// Your starter code here..."
-                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-[20px] md:rounded-[32px] px-6 md:px-8 py-6 font-mono text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-indigo-300 min-h-[160px] md:min-h-[200px] placeholder:text-white/10"
-                            spellCheck="false"
-                          />
+                          <div className="bg-[#0a0a0a] border border-white/10 rounded-[32px] overflow-hidden py-4">
+                            <Editor 
+                              height="250px"
+                              defaultLanguage={q.language || 'javascript'}
+                              language={q.language || 'javascript'}
+                              theme="vs-dark"
+                              value={q.placeholder || ''}
+                              onChange={(value) => updateQuestion(q.id, { placeholder: value || '' })}
+                              options={{
+                                fontSize: 14,
+                                minimap: { enabled: false },
+                                scrollBeyondLastLine: false,
+                                contextmenu: true,
+                                lineNumbers: 'on',
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-[0.3em] block">
+                              Validation Matrix (Test Cases)
+                            </label>
+                            <button 
+                              onClick={() => {
+                                const cases = q.testCases || [];
+                                updateQuestion(q.id, { testCases: [...cases, { input: '', expectedOutput: '' }] });
+                              }}
+                              className="px-4 py-2 bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-600/20 transition-all"
+                            >
+                              Add Test Case
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-4">
+                            {(q.testCases || [{ input: '', expectedOutput: '' }]).map((tc: any, tcIdx: number) => (
+                              <div key={tcIdx} className="p-6 bg-white/5 border border-white/10 rounded-3xl space-y-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-widest">Case #{tcIdx + 1}</span>
+                                  {tcIdx > 0 && (
+                                    <button 
+                                      onClick={() => {
+                                        const newCases = [...q.testCases];
+                                        newCases.splice(tcIdx, 1);
+                                        updateQuestion(q.id, { testCases: newCases });
+                                      }}
+                                      className="text-red-500 hover:text-red-400 p-1"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="text-[9px] font-mono text-white/20 uppercase mb-2 block">Standard Input</label>
+                                    <textarea 
+                                      value={tc.input}
+                                      onChange={(e) => {
+                                        const newCases = [...(q.testCases || [{ input: '', expectedOutput: '' }])];
+                                        newCases[tcIdx].input = e.target.value;
+                                        updateQuestion(q.id, { testCases: newCases });
+                                      }}
+                                      placeholder="EX: 5 10"
+                                      className="w-full bg-black/40 border border-white/5 rounded-xl p-4 font-mono text-xs focus:outline-none min-h-[80px]"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] font-mono text-white/20 uppercase mb-2 block">Expected Output</label>
+                                    <textarea 
+                                      value={tc.expectedOutput}
+                                      onChange={(e) => {
+                                        const newCases = [...(q.testCases || [{ input: '', expectedOutput: '' }])];
+                                        newCases[tcIdx].expectedOutput = e.target.value;
+                                        updateQuestion(q.id, { testCases: newCases });
+                                      }}
+                                      placeholder="EX: 15"
+                                      className="w-full bg-black/40 border border-white/5 rounded-xl p-4 font-mono text-xs focus:outline-none min-h-[80px]"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}

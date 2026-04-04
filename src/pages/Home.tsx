@@ -151,8 +151,8 @@ export default function Home() {
               </p>
             </div>
             <div className="hidden md:block">
-              <div className="w-32 h-32 rounded-full border border-white/10 flex items-center justify-center animate-spin-slow">
-                <Rocket className="w-12 h-12 text-white/20" />
+              <div className="w-32 h-32 rounded-full border border-white/10 flex items-center justify-center animate-spin-slow overflow-hidden p-6">
+                <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-contain opacity-20" />
               </div>
             </div>
           </div>
@@ -287,14 +287,14 @@ export default function Home() {
       {/* About Section */}
       <section id="about" className="py-32 px-6 border-t border-white/5 bg-white/[0.01]">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-white/10 rotate-12">
-            <Rocket className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-white/10 rotate-12 overflow-hidden shadow-2xl">
+            <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
           </div>
           <h2 className="text-5xl md:text-7xl font-display uppercase leading-none mb-8">
-            ABOUT <span className="vibrant-text">CAMPUSRANK</span>
+            ABOUT <span className="vibrant-text">SkillForge</span>
           </h2>
           <p className="text-2xl text-white/60 leading-relaxed font-medium">
-            CampusRank was born from a simple idea: that institutional assessments shouldn't be archaic. 
+            SkillForge was born from a simple idea: that institutional assessments shouldn't be archaic. 
             We are a team of educators and engineers dedicated to bringing high-end technological innovation to universities worldwide. 
             By merging sophisticated anti-cheating protocols with beautiful, intuitive design and predictive AI, we ensure meritocracy always wins.
           </p>
@@ -312,7 +312,7 @@ export default function Home() {
                 <span className="vibrant-text">ELEVATE</span> YOUR CAMPUS?
               </h2>
               <p className="text-2xl text-white/60 mb-16 max-w-3xl mx-auto font-medium">
-                Join hundreds of colleges already using CampusRank to benchmark skills and ensure academic integrity.
+                Join hundreds of colleges already using SkillForge to benchmark skills and ensure academic integrity.
               </p>
               <Link
                 to="/signup"
@@ -334,10 +334,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-24">
           <div className="col-span-2">
             <Link to="/" className="flex items-center gap-4 mb-12">
-              <div className="w-12 h-12 bg-neon-purple rounded-2xl flex items-center justify-center rotate-12">
-                <Rocket className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center rotate-12 overflow-hidden shadow-xl">
+                <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
               </div>
-              <span className="text-4xl font-display uppercase tracking-tighter">CampusRank</span>
+              <span className="text-4xl fiery-text">SkillForge</span>
             </Link>
             <p className="text-xl text-white/40 max-w-md mb-12 leading-relaxed">
               The world's most advanced skill benchmarking and assessment platform for higher education.
@@ -372,7 +372,7 @@ export default function Home() {
         </div>
         
         <div className="max-w-7xl mx-auto mt-32 pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8 text-white/20 font-medium">
-          <p>© 2026 CAMPUSRANK. ALL RIGHTS RESERVED.</p>
+          <p>© 2026 SkillForge. ALL RIGHTS RESERVED.</p>
           <div className="flex gap-12">
             <a href="#" className="hover:text-white transition-colors uppercase tracking-widest text-xs">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors uppercase tracking-widest text-xs">Terms of Service</a>

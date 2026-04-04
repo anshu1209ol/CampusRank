@@ -16,6 +16,7 @@ import {
   Play,
   Terminal
 } from 'lucide-react';
+import Editor from '@monaco-editor/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
@@ -41,7 +42,7 @@ export default function TestInterface() {
   const [hints, setHints] = useState<Record<string, string>>({});
   const [hintLoading, setHintLoading] = useState(false);
   const [codeRunning, setCodeRunning] = useState(false);
-  const [codeOutput, setCodeOutput] = useState<{ [key: string]: { output: string; error: string | null } }>({});
+  const [codeOutput, setCodeOutput] = useState<{ [key: string]: { output?: string; error?: string | null; results?: any[] } }>({});
 
   // Webcam & Keystroke Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -283,35 +284,59 @@ export default function TestInterface() {
     setCodeRunning(true);
     try {
       const token = user ? await user.getIdToken() : '';
-      const language = test.questions[currentQuestion].language || 'javascript'; // Default to javascript if unspecified in older tests
+      const currentQ = test.questions[currentQuestion];
+      const language = currentQ.language || 'javascript';
+      const testCases = currentQ.testCases || currentQ.test_cases || [];
+
       const response = await fetch('/api/execute-code', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ language, code }),
+        body: JSON.stringify({ problemId: currentQ.id || qId, language, code, testCases }),
       });
       
-      const textResult = await response.text();
-      let result;
-      try {
-        result = JSON.parse(textResult);
-      } catch (e) {
-        console.error('Non-JSON response:', textResult);
-        throw new Error('Invalid JSON response from server');
-      }
+      const { token: executionToken, error } = await response.json();
+      if (error) throw new Error(error);
 
-      setCodeOutput(prev => ({ ...prev, [qId]: result }));
-      if (result.error) {
-        toast.error('Execution encountered an error.');
-      } else {
-        toast.success('Code executed successfully!');
-      }
-    } catch (error) {
-      console.error('Execution error:', error);
-      toast.error('Failed to connect to execution server: ' + (error as Error).message);
-    } finally {
+      // Start Polling
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/check-status/${executionToken}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const update = await statusRes.json();
+          
+          if (update.results) {
+            setCodeOutput(prev => ({ ...prev, [qId]: update }));
+          }
+
+          if (update.status === 'completed') {
+            clearInterval(pollInterval);
+            setCodeRunning(false);
+            
+            const allPassed = update.results.every((r: any) => r.passed);
+            if (allPassed) {
+              toast.success('All test cases passed!');
+            } else {
+              toast.error(`${update.results.filter((r: any) => !r.passed).length} test cases failed.`);
+            }
+          } else if (update.status === 'error') {
+            clearInterval(pollInterval);
+            setCodeRunning(false);
+            toast.error('Execution encountered an error.');
+          }
+        } catch (err) {
+          clearInterval(pollInterval);
+          setCodeRunning(false);
+          toast.error('Hypervisor communication lost');
+        }
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('Execution failure:', error);
+      toast.error('Failed to connect to execution engine: ' + error.message);
       setCodeRunning(false);
     }
   };
@@ -335,10 +360,14 @@ export default function TestInterface() {
           let isCorrect = false;
           
           try {
+            const token = user ? await user.getIdToken() : '';
             const language = q.language || 'javascript';
             const response = await fetch('/api/execute-code', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
               body: JSON.stringify({ language, code: answers[q.id] }),
             });
             const textResult = await response.text();
@@ -482,11 +511,11 @@ export default function TestInterface() {
       <header className="h-24 border-b border-white/5 bg-black/40 backdrop-blur-3xl px-12 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-10">
           <div className="flex items-center gap-4 group cursor-default">
-            <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center shadow-2xl shadow-white/10 group-hover:scale-110 transition-transform">
-              <ShieldAlert className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl shadow-white/10 group-hover:scale-110 transition-transform overflow-hidden">
+              <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h1 className="font-display uppercase tracking-tighter text-xl leading-none">CampusRank</h1>
+              <h1 className="font-display uppercase tracking-tighter text-xl leading-none">SkillForge</h1>
               <span className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-[0.3em]">Secure Protocol v2.5</span>
             </div>
           </div>
@@ -715,37 +744,100 @@ export default function TestInterface() {
                     </div>
                   </div>
                   
-                  <textarea
-                    className="w-full min-h-[300px] h-[400px] bg-transparent p-10 font-mono text-base focus:outline-none resize-y text-indigo-300 placeholder:text-white/5 leading-relaxed relative z-10 selection:bg-indigo-500/30"
-                    placeholder={currentQ.placeholder || '// WRITING YOUR SOLUTION HERE...\n// Use standard input/output depending on the challenge.\n// Example (JS): console.log("Hello");\n// Example (Python): print("Hello")'}
-                    value={answers[currentQ.id] || ''}
-                    onKeyDown={(e) => {
-                      handleKeystroke(e);
-                      if (e.key === 'Tab') {
-                        e.preventDefault();
-                        const target = e.target as HTMLTextAreaElement;
-                        const start = target.selectionStart;
-                        const end = target.selectionEnd;
-                        const newAnswer = (answers[currentQ.id] || '').substring(0, start) + '  ' + (answers[currentQ.id] || '').substring(end);
-                        handleAnswer(currentQ.id, newAnswer);
-                        setTimeout(() => { target.selectionStart = target.selectionEnd = start + 2; }, 0);
-                      }
-                    }}
-                    onChange={(e) => handleAnswer(currentQ.id, e.target.value)}
-                    spellCheck="false"
-                  />
+                  <div className="flex-1 py-8 relative">
+                    <Editor
+                      height="400px"
+                      defaultLanguage={currentQ.language || 'javascript'}
+                      theme="vs-dark"
+                      value={answers[currentQ.id] || ''}
+                      onChange={(value) => handleAnswer(currentQ.id, value || '')}
+                      onMount={(editor) => {
+                         // Disable copy/paste inside monkaco edit as well?
+                         // Already handled by global listeners but good to have
+                      }}
+                      options={{
+                        fontSize: 16,
+                        fontFamily: 'JetBrains Mono',
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        cursorBlinking: 'smooth',
+                        cursorSmoothCaretAnimation: 'on',
+                        smoothScrolling: true,
+                        contextmenu: true,
+                        lineNumbers: 'on',
+                        renderLineHighlight: 'all',
+                        padding: { top: 20, bottom: 20 }
+                      }}
+                      className="font-mono bg-transparent"
+                      loading={<div className="h-[400px] w-full flex items-center justify-center text-white/5 font-mono text-xs animate-pulse uppercase tracking-[0.2em] bg-black">Secure Execution Environment Initializing...</div>}
+                    />
+                  </div>
 
                   {codeOutput[currentQ.id] && (
-                    <div className="bg-black/80 border-t border-white/5 p-8 relative z-10 max-h-[250px] overflow-y-auto">
-                      <div className="flex items-center gap-3 mb-4">
-                        <Terminal className={`w-4 h-4 ${codeOutput[currentQ.id].error ? 'text-red-500' : 'text-emerald-500'}`} />
-                        <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-[0.3em]">Console Output</span>
+                    <div className="bg-[#0f0f0f] border-t border-white/5 p-8 relative z-10 max-h-[400px] overflow-y-auto">
+                      <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-3">
+                          <Terminal className="w-5 h-5 text-indigo-400" />
+                          <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-[0.3em]">Code Execution Profile</span>
+                        </div>
+                        {codeOutput[currentQ.id].results && (
+                          <div className="flex items-center gap-4">
+                            <div className="text-[10px] font-mono font-bold text-white/20 uppercase tracking-widest">
+                              Passes: {codeOutput[currentQ.id].results.filter((r: any) => r.passed).length}/{codeOutput[currentQ.id].results.length}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <pre className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${
-                        codeOutput[currentQ.id].error ? 'text-red-400' : 'text-white/80'
-                      }`}>
-                        {codeOutput[currentQ.id].error || codeOutput[currentQ.id].output || 'Program exited with empty output.'}
-                      </pre>
+
+                      {codeOutput[currentQ.id].results ? (
+                        <div className="grid grid-cols-1 gap-4">
+                          {codeOutput[currentQ.id].results.map((res: any, idx: number) => (
+                            <div key={idx} className="p-6 bg-white/5 border border-white/10 rounded-2xl">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${res.passed ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>
+                                    {res.passed ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Case #{idx + 1}</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-white/20">{res.duration}ms</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                  <label className="text-[9px] font-mono text-white/20 uppercase mb-2 block">Input</label>
+                                  <div className="p-3 bg-black/40 rounded-lg font-mono text-[11px] text-white/40 truncate">{res.input || 'None'}</div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-mono text-white/20 uppercase mb-2 block">Expected</label>
+                                  <div className="p-3 bg-white/5 rounded-lg font-mono text-[11px] text-emerald-400/60 truncate">{res.expectedOutput}</div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-mono text-white/20 uppercase mb-2 block">Actual</label>
+                                  <div className={`p-3 bg-white/5 rounded-lg font-mono text-[11px] truncate ${res.passed ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {res.actualOutput || (res.error ? 'CRASH' : 'NULL')}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {res.error && (
+                                <div className="mt-4 p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
+                                  <p className="text-[10px] font-mono text-red-400/80 leading-relaxed font-bold mb-1">Standard Error:</p>
+                                  <pre className="text-[10px] font-mono text-red-400/60 line-clamp-2">{res.error}</pre>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-8 bg-black/40 border border-white/5 rounded-3xl">
+                          <pre className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${
+                            codeOutput[currentQ.id].error ? 'text-red-400' : 'text-white/80'
+                          }`}>
+                            {codeOutput[currentQ.id].error || codeOutput[currentQ.id].output || 'Program exited with empty output.'}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

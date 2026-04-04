@@ -209,7 +209,7 @@ export default function Results() {
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs">AI</div>
-                    <span className="text-xs font-mono font-bold text-white/20 uppercase tracking-widest">CampusRank Intelligence Engine</span>
+                    <span className="text-xs font-mono font-bold text-white/20 uppercase tracking-widest">SkillForge Intelligence Engine</span>
                   </div>
                 </div>
                 

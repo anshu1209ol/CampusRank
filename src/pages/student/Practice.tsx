@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
-import { Layout, Library, ChevronLeft, Search, Loader2 } from 'lucide-react';
+import { Layout, Library, ChevronLeft, Search, Loader2, Code2 } from 'lucide-react';
 import Sidebar from '@/src/components/Sidebar';
 import Header from '@/src/components/Header';
 import TestCard from '@/src/components/TestCard';
@@ -11,6 +11,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 
 const sidebarItems = [
   { icon: Layout, label: 'Dashboard', href: '/student' },
+  { icon: Code2, label: 'Problems', href: '/student/problems' },
   { icon: Library, label: 'Practice Hub', href: '/student/practice' },
 ];
 

@@ -104,12 +104,12 @@ export default function Signup() {
       >
         <div className="text-center mb-10">
           <Link to="/" className="inline-flex items-center gap-4 mb-6 group">
-            <div className="w-14 h-14 bg-neon-purple rounded-2xl flex items-center justify-center shadow-2xl shadow-neon-purple/40 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500">
-              <Rocket className="w-6 h-6 text-white" />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl shadow-neon-purple/40 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 overflow-hidden">
+              <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
             </div>
           </Link>
           <h1 className="text-5xl font-display uppercase tracking-tighter mb-4">CREATE ACCOUNT</h1>
-          <p className="text-lg text-white/40 font-medium uppercase tracking-widest">JOIN CAMPUSRANK AND START BENCHMARKING</p>
+          <p className="text-lg text-white/40 font-medium uppercase tracking-widest">JOIN SkillForge AND START BENCHMARKING</p>
         </div>
 
         <div className="bg-white/[0.03] border border-white/10 backdrop-blur-3xl rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group">

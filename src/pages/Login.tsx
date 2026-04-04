@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Rocket, Mail, Lock, ArrowRight, Chrome, Loader2, GraduationCap, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '@/src/lib/firebase';
 
@@ -26,6 +26,11 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
+      // Sign out any existing session first to prevent stale sessions
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -33,12 +38,15 @@ export default function Login() {
       if (docSnap.exists()) {
         const userData = docSnap.data();
         if (userData.role !== loginRole) {
-          toast.error(`INCORRECT ROLE SELECTED. PLEASE SWITCH TO ${userData.role.toUpperCase()}.`);
+          // Sign out the wrong-role user immediately
+          await signOut(auth);
+          toast.error(`INCORRECT ROLE SELECTED. YOUR ACCOUNT IS REGISTERED AS ${userData.role.toUpperCase()}.`);
           return;
         }
         handleRoleRedirect(userData.role);
         toast.success('WELCOME BACK!');
       } else {
+        await signOut(auth);
         toast.error('PROFILE NOT FOUND. PLEASE SIGN UP.');
       }
     } catch (error: any) {
@@ -52,6 +60,11 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
+      // Sign out any existing session first to prevent stale sessions
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
@@ -61,12 +74,15 @@ export default function Login() {
       if (docSnap.exists()) {
         const userData = docSnap.data();
         if (userData.role !== loginRole) {
-          toast.error(`INCORRECT ROLE SELECTED. PLEASE SWITCH TO ${userData.role.toUpperCase()}.`);
+          // Sign out the wrong-role user immediately
+          await signOut(auth);
+          toast.error(`INCORRECT ROLE SELECTED. YOUR ACCOUNT IS REGISTERED AS ${userData.role.toUpperCase()}.`);
           return;
         }
         handleRoleRedirect(userData.role);
         toast.success('LOGGED IN WITH GOOGLE!');
       } else {
+        await signOut(auth);
         toast.error('ACCOUNT NOT FOUND. PLEASE SIGN UP FIRST.');
       }
     } catch (error: any) {
@@ -88,8 +104,8 @@ export default function Login() {
       >
         <div className="text-center mb-10">
           <Link to="/" className="inline-flex items-center gap-4 mb-6 group">
-            <div className="w-14 h-14 bg-neon-purple rounded-2xl flex items-center justify-center shadow-2xl shadow-neon-purple/40 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500">
-              <Rocket className="w-6 h-6 text-white" />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl shadow-neon-purple/40 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 overflow-hidden">
+              <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
             </div>
           </Link>
           <h1 className="text-5xl font-display uppercase tracking-tighter mb-4">WELCOME BACK</h1>

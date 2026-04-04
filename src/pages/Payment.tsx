@@ -30,7 +30,7 @@ export default function Payment() {
         
         <h1 className="text-4xl md:text-5xl font-display uppercase tracking-tighter mb-4">Complete Your Upgrade</h1>
         <p className="text-white/50 text-lg leading-relaxed mb-12">
-          Unlock the full potential of CampusRank with our premium tiers. Empower your campus with advanced data and analytics.
+          Unlock the full potential of SkillForge with our premium tiers. Empower your campus with advanced data and analytics.
         </p>
         
         <div className="space-y-6">

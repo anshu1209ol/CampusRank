@@ -33,11 +33,11 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-4 group">
-          <div className="w-12 h-12 bg-neon-purple rounded-2xl flex items-center justify-center shadow-lg shadow-neon-purple/20 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500">
-            <Rocket className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-neon-purple/20 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 overflow-hidden">
+            <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
           </div>
-          <span className="text-3xl font-display uppercase tracking-tighter">
-            CampusRank
+          <span className="text-3xl fiery-text">
+            SkillForge
           </span>
         </Link>
 
@@ -92,10 +92,10 @@ export default function Navbar() {
           >
             <div className="flex justify-between items-center mb-16">
               <Link to="/" className="flex items-center gap-4" onClick={() => setIsMobileMenuOpen(false)}>
-                <div className="w-10 h-10 bg-neon-purple rounded-xl flex items-center justify-center">
-                  <Rocket className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
+                  <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
                 </div>
-                <span className="text-2xl font-display uppercase tracking-tighter">CampusRank</span>
+                <span className="text-2xl fiery-text leading-none">SkillForge</span>
               </Link>
               <button
                 className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-xl border border-white/10"

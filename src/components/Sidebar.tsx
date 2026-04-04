@@ -34,11 +34,11 @@ const SidebarItem = ({ icon: Icon, label, href, active }: SidebarItemProps) => (
 
 interface SidebarProps {
   items: SidebarItemProps[];
-  logoIcon: LucideIcon;
-  logoColor: string;
+  logoIcon?: LucideIcon;
+  logoColor?: string;
 }
 
-export default function Sidebar({ items, logoIcon: LogoIcon, logoColor }: SidebarProps) {
+export default function Sidebar({ items, logoIcon: LogoIcon = LayoutDashboard, logoColor }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -79,11 +79,11 @@ export default function Sidebar({ items, logoIcon: LogoIcon, logoColor }: Sideba
       )}>
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-4 px-2 group" onClick={() => setIsOpen(false)}>
-            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl transition-transform group-hover:scale-110 group-hover:rotate-3", logoColor)}>
-              <LogoIcon className="w-7 h-7 text-white" />
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl transition-transform group-hover:scale-110 group-hover:rotate-3 overflow-hidden">
+              <img src="/logo.png" alt="SkillForge Logo" className="w-full h-full object-cover" />
             </div>
-            <span className="text-3xl font-display uppercase tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50">
-              CampusRank
+            <span className="text-3xl fiery-text">
+              SkillForge
             </span>
           </Link>
           <button 
