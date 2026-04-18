@@ -480,7 +480,7 @@ async function startServer() {
   };
   
   const getQwenModel = () => {
-    const key = process.env.BYTEZ_API_KEY || "f6bc8c39f9d5b7ad5d930e9304e4b921";
+    const key = process.env.BYTEZ_API_KEY;
     if (!key) throw new Error('Bytez API Key missing on server');
     const bytezSdk = new Bytez(key);
     return bytezSdk.model("Qwen/Qwen3-0.6B");
