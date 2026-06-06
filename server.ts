@@ -282,6 +282,80 @@ async function startServer() {
     }
   });
 
+  // Helper: Check if Docker daemon is available
+  const isDockerAvailable = async (): Promise<boolean> => {
+    const { exec } = await import('child_process');
+    return new Promise((resolve) => {
+      exec('docker info', { timeout: 3000 }, (err) => resolve(!err));
+    });
+  };
+
+  // Helper: AI-based code evaluation (fallback when Docker is unavailable)
+  const evaluateCodeWithAI = async (code: string, lang: string, testCases: any[], enforceOutputMatch: boolean): Promise<any[]> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const results: any[] = [];
+    
+    for (const [idx, tc] of testCases.entries()) {
+      const startTime = Date.now();
+      try {
+        const prompt = `You are a code execution engine. Evaluate the following ${lang} code against the given input and determine the expected output.
+
+Code:
+\`\`\`${lang}
+${code}
+\`\`\`
+
+Input: ${tc.input || '(no input)'}
+Expected Output: ${tc.expectedOutput || tc.output || '(any valid output)'}
+
+Execute this code mentally and return a JSON object with:
+- "output": the actual output the code would produce (string)
+- "passed": true if the output matches expected (boolean), or true if no expected output is enforced
+- "error": null if no error, or a string describing the runtime/compile error
+
+Return ONLY the JSON object, no markdown.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: prompt,
+          config: { responseMimeType: 'application/json' }
+        });
+
+        const parsed = JSON.parse(response.text || '{}');
+        const duration = Date.now() - startTime;
+        const expectedOut = tc.expectedOutput || tc.output || '';
+        
+        let passed = enforceOutputMatch
+          ? (parsed.output?.trim() === expectedOut.trim())
+          : !parsed.error;
+
+        results.push({
+          id: idx + 1,
+          input: tc.input,
+          expectedOutput: enforceOutputMatch ? expectedOut : 'No expected output provided',
+          actualOutput: parsed.output || '',
+          error: parsed.error || null,
+          passed,
+          duration,
+          evaluatedBy: 'ai'
+        });
+      } catch (aiErr: any) {
+        const duration = Date.now() - startTime;
+        results.push({
+          id: idx + 1,
+          input: tc.input,
+          expectedOutput: tc.expectedOutput || '',
+          actualOutput: '',
+          error: 'AI evaluation failed: ' + aiErr.message,
+          passed: false,
+          duration,
+          evaluatedBy: 'ai'
+        });
+      }
+    }
+    return results;
+  };
+
   // 1. Initial Submission Endpoint (Post to Hypervisor)
   app.post('/api/execute-code', executeCodeLimiter, authenticateToken, async (req, res) => {
     const { problemId, language, code, languageId } = req.body;
@@ -296,7 +370,6 @@ async function startServer() {
       return res.status(400).json({ error: 'Language and code are required' });
     }
 
-    const { exec } = await import('child_process');
     const token = Math.random().toString(36).substring(2, 15);
 
     try {
@@ -345,7 +418,7 @@ async function startServer() {
       }
       if (testCases.length === 0) {
         testCases = [{ input: '', expectedOutput: '' }];
-        enforceOutputMatch = false; // Don't strictly check output if teacher provided NO test cases
+        enforceOutputMatch = false;
       }
 
       // 2. Initialize submission state
@@ -359,8 +432,30 @@ async function startServer() {
       // 3. Respond with token immediately (Polling Architecture)
       res.json({ token });
 
-      // 4. Background Execution Sequence
+      // 4. Background Execution — Docker first, AI fallback
       (async () => {
+        const dockerAvailable = await isDockerAvailable();
+
+        if (!dockerAvailable) {
+          // --- AI Fallback Path ---
+          console.log('ℹ️  Docker not available — using AI evaluation fallback for token:', token);
+          try {
+            const aiResults = await evaluateCodeWithAI(code, lang, testCases, enforceOutputMatch);
+            submissionResults.set(token, {
+              status: 'completed',
+              results: aiResults,
+              total: testCases.length,
+              completed: aiResults.length,
+              engine: 'ai-fallback'
+            });
+          } catch (aiErr: any) {
+            submissionResults.set(token, { status: 'error', error: 'AI evaluation unavailable: ' + aiErr.message });
+          }
+          return;
+        }
+
+        // --- Docker Execution Path ---
+        const { exec } = await import('child_process');
         let containerImage = '';
         let setupCmd = '';
         let solveCmd = '';
@@ -387,7 +482,7 @@ async function startServer() {
           setupCmd = `echo "${Buffer.from(code).toString('base64')}" | base64 -d > /tmp/${fileName} && javac /tmp/${fileName}`;
           solveCmd = `java -cp /tmp Main`;
         } else {
-          submissionResults.set(token, { status: 'error', error: 'Unsupported sandbox' });
+          submissionResults.set(token, { status: 'error', error: 'Unsupported sandbox language' });
           return;
         }
 
@@ -433,10 +528,10 @@ async function startServer() {
             actualOutput: cleanupOutput,
             error: stderr || null,
             passed,
-            duration
+            duration,
+            engine: 'docker'
           });
 
-          // Update real-time status
           submissionResults.set(token, {
             status: idx === testCases.length - 1 ? 'completed' : 'processing',
             results: [...currentResults],
@@ -447,9 +542,13 @@ async function startServer() {
       })();
     } catch (err: any) {
       console.error('Hypervisor trigger fault:', err);
-      res.status(500).json({ error: 'Hypervisor fault' });
+      // Ensure a valid JSON response is always sent if not already sent
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Hypervisor fault: ' + err.message });
+      }
     }
   });
+
 
   // 2. Status Check Endpoint (Polling Architecture)
   app.get('/api/check-status/:token', authenticateToken, (req, res) => {
